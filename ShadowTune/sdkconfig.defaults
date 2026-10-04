@@ -1,0 +1,112 @@
+# MP3 Player firmware — ESP-IDF sdkconfig defaults
+# Forked from SecureVault — removed BLE/NimBLE/crypto/mbedtls/tinyusb config,
+# kept flash/PSRAM/FreeRTOS/Arduino/WiFi/I2S config required for dual-framework mode.
+
+# Required because platformio.ini uses `framework = arduino, espidf`
+# (dual-framework mode). Dual-framework mode generates a fresh sdkconfig
+# from ESP-IDF's own defaults rather than the prebuilt one plain
+# `framework = arduino` ships with, and ESP-IDF's default (100Hz) doesn't
+# satisfy Arduino's hard requirement of 1000Hz.
+
+# Flash size must be set explicitly — dual-framework mode defaults to 2MB
+# (the ESP32-S3-DevKitC-1 board manifest's default), but this board has
+# 16MB. Without this line, gen_esp32part.py picks the board manifest's
+# flash size (2MB) to validate the partition table, and the mismatch
+# against our 16MB partition layout produces the warning:
+#   "Flash memory size mismatch detected. Expected 16MB, found 2MB!"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+CONFIG_FREERTOS_HZ=1000
+
+# Main loop task stack. Must be large enough for the deepest call chain
+# that runs on the loopTask. MP3 playback + WiFi hotspot + display rendering
+# can be memory-intensive. 32KB gives comfortable headroom.
+CONFIG_ARDUINO_LOOP_STACK_SIZE=32768
+
+# Octal PSRAM (N16R8's "R8" = 8MB octal PSRAM). Same root cause as the
+# FREERTOS_HZ line above: dual-framework mode doesn't automatically
+# translate platformio.ini's `board_build.psram_type = opi` /
+# `board_build.arduino.memory_type = qio_opi` into sdkconfig the way
+# plain `framework = arduino` mode's prebuilt config does -- without
+# these, PSRAM support compiles out entirely even though the .ini says
+# opi. Flash stays QIO (quad) per qio_opi -- only PSRAM is octal here.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# app_main / Arduino autostart. THE ROOT CAUSE of "undefined reference to
+# `app_main'" at link time. Arduino-ESP32's app_main() (the function that
+# calls initArduino() then setup()/loop()) lives in cores/esp32/main.cpp,
+# but that whole definition is wrapped in `#if CONFIG_AUTOSTART_ARDUINO`.
+# In plain `framework = arduino` mode this is turned on for you by the
+# prebuilt config PlatformIO ships. Dual-framework mode generates a fresh
+# sdkconfig from ESP-IDF defaults instead -- so main.cpp's app_main never
+# got compiled in at all. This single line is the fix.
+CONFIG_AUTOSTART_ARDUINO=y
+
+# ── Task Watchdog — disable idle-task monitoring on core 1 ──────────────
+# Arduino's loopTask runs on core 1 at priority 1, which starves the
+# idle task (priority 0) during long operations (MP3 decode, SD writes).
+# The TWDT monitors idle tasks and fires a panic after 5s default timeout
+# when the idle task doesn't run. Since the loopTask IS functioning
+# correctly (just busy), monitoring its core's idle task causes false-
+# positive watchdog reboots during legitimate operations. Core 0 idle
+# monitoring stays on.
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# Lower the "always use internal SRAM below this size" cutoff from the
+# 16KB default down to 512 bytes. This is what was silently forcing
+# small heap allocations onto internal SRAM even with PSRAM sitting empty.
+# Buffers that explicitly need internal/DMA memory (heap_caps_malloc)
+# are unaffected by this.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=512
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  WiFi (needed for Hotspot/AP mode)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dual-framework mode's fresh sdkconfig has WiFi off by default.
+# The hotspot manager uses SoftAP + DNS hijack + captive portal.
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP_NETIF_TCPIP_LWIP=y
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  mbedTLS
+# ═══════════════════════════════════════════════════════════════════════════════
+# Used for SHA-256 (dashboard PIN hashing). All needed modules are
+# enabled by default in ESP-IDF 5.5.4.
+CONFIG_MBEDTLS_HARDWARE_SHA=y
+
+
+# FATFS Long Filename Support
+CONFIG_FATFS_LFN_NONE=n
+CONFIG_FATFS_LFN_STACK=y
+CONFIG_FATFS_CHDIR=y
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TinyUSB (USB-OTG CDC + Mass Storage composite device)
+# ═══════════════════════════════════════════════════════════════════════════════
+# When the ESP32 is connected via USB OTG, the SD card appears as a USB
+# flash drive. These Kconfig options enable the TinyUSB stack and its
+# CDC/MSC class drivers (used here for the Kconfig-symbol declarations
+# that Arduino core's own USBMSC.cpp/USBCDC.cpp check). The MSC device
+# itself is Arduino's own USBMSC wrapper class, brought up via USB.begin()
+# -- see usb_msc_manager.cpp -- with ARDUINO_USB_MODE=0 (USB-OTG mode)
+# forced in platformio.ini's build_flags. We do NOT call the vendored
+# esp_tinyusb component's own tinyusb_driver_install() ourselves; doing
+# so previously linked two competing TinyUSB driver-install/tud_msc_*
+# implementations into the same firmware.elf.
+#
+# CONFIG_TINYUSB_ENABLED below is NOT a real Kconfig symbol in
+# components/esp_tinyusb/Kconfig or components/tinyusb, so this line has
+# no actual effect through the sdkconfig path; Arduino's
+# esp32-hal-tinyusb.h checks this exact macro to decide whether to
+# include the real TinyUSB headers at all, so it's defined directly as a
+# compiler flag instead (-DCONFIG_TINYUSB_ENABLED=1 in platformio.ini's
+# build_flags, see the comment there). CDC/MSC below ARE real,
+# correctly-declared options in that Kconfig and take effect normally
+# through the usual sdkconfig.defaults path.
+CONFIG_TINYUSB_ENABLED=y
+CONFIG_TINYUSB_CDC_ENABLED=y
+CONFIG_TINYUSB_MSC_ENABLED=y

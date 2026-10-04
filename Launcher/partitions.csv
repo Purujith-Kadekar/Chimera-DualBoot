@@ -1,0 +1,25 @@
+# EdgeHax Launcher -- shared partition table for the dual-boot setup
+#
+#   factory = this launcher (boots on every reset/power-up)
+#   ota_0   = SecureVault (password manager)  <- firmware.bin from that project
+#   ota_1   = ShadowTune  (MP3 player)        <- firmware.bin from that project
+#
+# nvs / phy_init / gpio_cfg / littlefs keep the same names, subtypes and
+# types the two apps already look for at runtime (they find partitions by
+# type + label, never by fixed offset), so they run unmodified.
+# nvs is kept at the same offset/size both apps used before (0x9000, 0x6000),
+# so SecureVault's PIN and both apps' NVS settings survive the move.
+#
+# Subtype is written numerically (0x83 / 0x40) for the same reason as in the
+# original projects: raw ESP-IDF gen_esp32part.py does not know "littlefs".
+#
+# Name,      Type, SubType,  Offset,    Size,      Flags
+nvs,         data, nvs,      0x9000,    0x6000,
+phy_init,    data, phy,      0xF000,    0x1000,
+otadata,     data, ota,      0x10000,   0x2000,
+gpio_cfg,    data, 0x40,     0x12000,   0x1000,
+factory,     app,  factory,  0x20000,   0x140000,
+ota_0,       app,  ota_0,    0x160000,  0x400000,
+ota_1,       app,  ota_1,    0x560000,  0x200000,
+littlefs,    data, 0x83,     0x760000,  0x890000,
+coredump,    data, coredump, 0xFF0000,  0x10000,

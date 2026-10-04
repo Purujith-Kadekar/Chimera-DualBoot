@@ -1,0 +1,69 @@
+--- a/include/vault_types.h
++++ b/include/vault_types.h
+@@ -43,6 +43,17 @@
+ // (e.g. 256-bit) some issuers use.
+ #define TOTP_SECRET_LEN 64
+ 
++// ── Notes field length ─────────────────────────────────────────────────
++// Single source of truth for the notes buffer size (RW struct, PSRAM
++// storage, allocation and memset all use this). Was a hard-coded 160
++// (159 usable chars), which silently truncated secure notes -- too short
++// for a seed/pass phrase. 512 bytes (511 usable chars) fits a 24-word
++// phrase with room to spare. Stays well inside the 2048-byte per-record
++// JSON budget (VaultManager::MAX_RECORD_JSON_LEN) even for an identity
++// entry with every field full. Existing vault.db files load unchanged
++// (records are variable-length JSON; shorter old notes just fit).
++#define VAULT_NOTES_LEN 512
++
+ // ── Passkey field lengths ──────────────────────────────────────────────
+ // credentialId: base64url, WebAuthn credential IDs are commonly 16-32
+ //   raw bytes -> up to ~44 chars; 96 gives headroom for larger IDs some
+@@ -106,7 +117,7 @@
+ 
+   // LOGIN
+   char url[64];
+-  char notes[160];
++  char notes[VAULT_NOTES_LEN];
+   char folder[24];
+   // CARD
+   char cardholder[32];
+--- a/include/vault_manager.h
++++ b/include/vault_manager.h
+@@ -215,7 +215,7 @@
+ 
+   // LOGIN extras
+   char (*_url)[64];
+-  char (*_notes)[160];
++  char (*_notes)[VAULT_NOTES_LEN];
+   char (*_folder)[24];
+   // CARD extras
+   char (*_cardholder)[32];
+--- a/src/vault_manager.cpp
++++ b/src/vault_manager.cpp
+@@ -149,7 +149,7 @@
+   SV_ALLOC_ARRAY_1D(_deleted, bool);
+   // LOGIN extras
+   SV_ALLOC_ARRAY_2D(_url, 64);
+-  SV_ALLOC_ARRAY_2D(_notes, 160);
++  SV_ALLOC_ARRAY_2D(_notes, VAULT_NOTES_LEN);
+   SV_ALLOC_ARRAY_2D(_folder, 24);
+   // CARD extras
+   SV_ALLOC_ARRAY_2D(_cardholder, 32);
+@@ -206,7 +206,7 @@
+   memset(_favorite, 0, MAX_ENTRIES);
+   memset(_deleted, 0, MAX_ENTRIES);
+   memset(_url, 0, MAX_ENTRIES * 64);
+-  memset(_notes, 0, MAX_ENTRIES * 160);
++  memset(_notes, 0, MAX_ENTRIES * VAULT_NOTES_LEN);
+   memset(_folder, 0, MAX_ENTRIES * 24);
+   memset(_cardholder, 0, MAX_ENTRIES * 32);
+   memset(_cardNumber, 0, MAX_ENTRIES * 24);
+@@ -677,7 +677,7 @@
+   memset(_favorite, 0, MAX_ENTRIES);
+   memset(_deleted, 0, MAX_ENTRIES);
+   memset(_url, 0, MAX_ENTRIES * 64);
+-  memset(_notes, 0, MAX_ENTRIES * 160);
++  memset(_notes, 0, MAX_ENTRIES * VAULT_NOTES_LEN);
+   memset(_folder, 0, MAX_ENTRIES * 24);
+   memset(_cardholder, 0, MAX_ENTRIES * 32);
+   memset(_cardNumber, 0, MAX_ENTRIES * 24);

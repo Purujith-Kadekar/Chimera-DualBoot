@@ -1,0 +1,26 @@
+# EdgeHax Launcher -- ESP-IDF sdkconfig defaults (dual-framework mode)
+
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_FREERTOS_HZ=1000
+CONFIG_AUTOSTART_ARDUINO=y
+
+# ---------------------------------------------------------------------------
+# THE KEY SETTING: bootloader app-rollback.
+#
+# Flow: the launcher marks the chosen app as the next boot image (state NEW).
+# The bootloader boots it once (state PENDING_VERIFY). Because the two apps
+# never confirm themselves (they are built without rollback support and are
+# unmodified), the NEXT reset -- power cycle, deep-sleep wake, crash,
+# esp_restart() -- makes the bootloader mark that app ABORTED and fall back to
+# the factory partition, i.e. this launcher. Result: the menu shows up on
+# every boot, with zero changes to either app.
+#
+# Both symbol names are listed because it was renamed between ESP-IDF
+# versions; unknown symbols are silently ignored.
+# ---------------------------------------------------------------------------
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_APP_ROLLBACK_ENABLE=y
+
+# Launcher is tiny; default loop stack is plenty.
+CONFIG_ARDUINO_LOOP_STACK_SIZE=8192

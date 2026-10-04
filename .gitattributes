@@ -1,0 +1,11 @@
+# Normalise line endings in the repo; checkout uses each OS default.
+* text=auto
+
+# Binary files: never touch line endings / never diff as text
+*.bin   binary
+*.png   binary
+*.jpg   binary
+*.zip   binary
+
+# Shell scripts must stay LF even on Windows checkouts
+*.sh    text eol=lf
